@@ -1,0 +1,6 @@
+CTkMessagebox==2.7
+customtkinter==5.2.2
+darkdetect==0.8.0
+packaging==26.2
+pillow==12.2.0
+qrcode==8.2
