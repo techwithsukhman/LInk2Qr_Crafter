@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Link2QrCrafter — Client-Side QR Code Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-subtle: #f1f5f9;
+      --border-color: #e2e8f0;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+    }
+    html.dark {
+      --bg-page: #0b1120;
+      --bg-card: #111827;
+      --bg-subtle: #1e293b;
+      --border-color: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+    }
+    body {
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+    .theme-card {
+      background-color: var(--bg-card);
+      border-color: var(--border-color);
+      transition: background-color 0.25s ease, border-color 0.25s ease;
+    }
+    .theme-subtle {
+      background-color: var(--bg-subtle);
+      transition: background-color 0.25s ease;
+    }
+    /* Ensure qr-code-styling generated canvas scales cleanly inside the preview frame */
+    #qr-preview-container canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto !important;
+      height: auto !important;
+      border-radius: 0.75rem;
+    }
+  </style>
+</head>
+<body class="font-sans min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-700 dark:selection:bg-indigo-900 dark:selection:text-indigo-200">
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-16 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
+    <svg class="w-4 h-4 text-emerald-400 dark:text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+    </svg>
+    <span id="toast-message">Done!</span>
+  </div>
+
+  <!-- Header -->
+  <header class="theme-card border-b sticky top-0 z-30 backdrop-blur-md bg-opacity-90 dark:bg-opacity-90">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="h-16 flex items-center justify-between gap-4">
+        <!-- Brand -->
+        <button type="button" data-nav="generator" class="flex items-center gap-3 text-left focus:outline-none group">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-sm group-hover:bg-indigo-700 transition-colors shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+            </svg>
+          </div>
+          <span class="text-lg font-bold tracking-tight">Link2QrCrafter</span>
+        </button>
+
+        <!-- Desktop Navigation -->
+        <nav class="hidden md:flex items-center gap-1" aria-label="Main Navigation">
+          <button type="button" data-nav="generator" class="nav-link px-3 py-2 rounded-xl text-sm font-semibold transition-colors bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">Generator</button>
+          <button type="button" data-nav="privacy" class="nav-link px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Privacy Policy</button>
+          <button type="button" data-nav="security" class="nav-link px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Data &amp; Security</button>
+          <button type="button" data-nav="terms" class="nav-link px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Terms of Use</button>
+        </nav>
+
+        <!-- Right Controls -->
+        <div class="flex items-center gap-2">
+          <!-- Theme Toggle -->
+          <button id="theme-toggle" type="button" aria-label="Toggle Light/Dark Theme" class="p-2.5 rounded-xl theme-subtle text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg id="theme-icon-sun" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+            </svg>
+            <svg id="theme-icon-moon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </button>
+
+          <!-- Mobile Menu Button -->
+          <button id="mobile-menu-btn" type="button" aria-label="Open Menu" class="md:hidden p-2.5 rounded-xl theme-subtle text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Navigation Drawer -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4 pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1">
+        <button type="button" data-nav="generator" class="nav-link w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">Generator</button>
+        <button type="button" data-nav="privacy" class="nav-link w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Privacy Policy</button>
+        <button type="button" data-nav="security" class="nav-link w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Data &amp; Security</button>
+        <button type="button" data-nav="terms" class="nav-link w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">Terms of Use</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+
+    <!-- VIEW 1: GENERATOR -->
+    <section id="view-generator" class="app-view">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+
+        <!-- Left Panel: Input & Customization -->
+        <div class="lg:col-span-7 space-y-6">
+
+          <!-- Text / Link Input Card -->
+          <div class="theme-card rounded-2xl shadow-sm border p-5 sm:p-6 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <label for="text-input" class="block text-base font-bold">Enter Link or Text</label>
+              <div class="flex items-center gap-3">
+                <span id="char-count" class="text-xs text-slate-500 dark:text-slate-400 font-medium">0 chars • 0 / 2953 bytes</span>
+                <button id="clear-btn" type="button" class="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline">Clear</button>
+              </div>
+            </div>
+            <textarea id="text-input" rows="4" placeholder="https://example.com or any text..." class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/70 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all resize-y">https://link2qrcrafter.app</textarea>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Your QR code updates live as you type.</p>
+          </div>
+
+          <!-- Customization Card -->
+          <div class="theme-card rounded-2xl shadow-sm border p-5 sm:p-6 space-y-5">
+            <div class="flex items-center justify-between">
+              <h2 class="text-base font-bold">Customization</h2>
+              <button id="reset-colors-btn" type="button" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Reset Style</button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <!-- Dot Style -->
+              <div class="space-y-2">
+                <label for="dot-style" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Dot Style</label>
+                <select id="dot-style" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all">
+                  <option value="rounded" selected>Rounded</option>
+                  <option value="dots">Dots</option>
+                  <option value="classy">Classy</option>
+                  <option value="classy-rounded">Classy Rounded</option>
+                  <option value="extra-rounded">Extra Rounded</option>
+                  <option value="square">Square</option>
+                </select>
+              </div>
+
+              <!-- Corner Eye Style -->
+              <div class="space-y-2">
+                <label for="corner-style" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Corner Eye Style</label>
+                <select id="corner-style" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all">
+                  <option value="extra-rounded" selected>Extra Rounded</option>
+                  <option value="dot">Dot</option>
+                  <option value="square">Square</option>
+                </select>
+              </div>
+
+              <!-- Color Mode -->
+              <div class="space-y-2">
+                <label for="color-mode" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Color Mode</label>
+                <select id="color-mode" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all">
+                  <option value="gradient" selected>Linear Gradient</option>
+                  <option value="solid">Solid Color</option>
+                </select>
+              </div>
+
+              <!-- Center Badge -->
+              <div class="space-y-2">
+                <label for="center-badge" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Center Badge</label>
+                <select id="center-badge" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all">
+                  <option value="none">None</option>
+                  <option value="link" selected>Link Icon</option>
+                  <option value="star">Star</option>
+                  <option value="shield">Shield</option>
+                  <option value="sparkles">Sparkles</option>
+                </select>
+              </div>
+
+              <!-- Error Correction -->
+              <div class="space-y-2">
+                <label for="ec-level" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Error Correction</label>
+                <select id="ec-level" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all">
+                  <option value="L">Low (7% recovery)</option>
+                  <option value="M">Medium (15% recovery)</option>
+                  <option value="Q" selected>Quartile (25% recovery)</option>
+                  <option value="H">High (30% recovery)</option>
+                </select>
+              </div>
+
+              <!-- Size Slider (160px - 400px) -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label for="qr-size" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Size</label>
+                  <span id="qr-size-val" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">256 × 256 px</span>
+                </div>
+                <input id="qr-size" type="range" min="160" max="400" step="16" value="256" class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 mt-2">
+              </div>
+
+              <!-- Foreground Color 1 -->
+              <div class="space-y-2">
+                <label for="fg-color" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Foreground Color 1</label>
+                <div class="flex items-center gap-3 border border-slate-300 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800">
+                  <input id="fg-color" type="color" value="#4f46e5" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                  <span id="fg-color-hex" class="text-sm font-mono text-slate-700 dark:text-slate-200 uppercase">#4F46E5</span>
+                </div>
+              </div>
+
+              <!-- Foreground Color 2 (Gradient) -->
+              <div id="fg-color-2-wrap" class="space-y-2">
+                <label for="fg-color-2" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Foreground Color 2</label>
+                <div class="flex items-center gap-3 border border-slate-300 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800">
+                  <input id="fg-color-2" type="color" value="#06b6d4" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                  <span id="fg-color-2-hex" class="text-sm font-mono text-slate-700 dark:text-slate-200 uppercase">#06B6D4</span>
+                </div>
+              </div>
+
+              <!-- Background Color -->
+              <div class="space-y-2 sm:col-span-2">
+                <label for="bg-color" class="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Background Color</label>
+                <div class="flex items-center gap-3 border border-slate-300 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800">
+                  <input id="bg-color" type="color" value="#ffffff" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0">
+                  <span id="bg-color-hex" class="text-sm font-mono text-slate-700 dark:text-slate-200 uppercase">#FFFFFF</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Panel: Single Live Preview & Export -->
+        <div class="lg:col-span-5 lg:sticky lg:top-24">
+          <div class="theme-card rounded-2xl shadow-sm border p-5 sm:p-6 flex flex-col items-center">
+            <div class="w-full flex items-center justify-between mb-4">
+              <h2 class="text-base font-bold">Live Preview</h2>
+              <span id="qr-status-badge" class="text-xs font-medium px-2.5 py-1 rounded-full theme-subtle text-slate-500 dark:text-slate-400">Ready</span>
+            </div>
+
+            <!-- Centered Elevated Preview Frame -->
+            <div class="w-full aspect-square max-w-[340px] bg-gradient-to-br from-slate-100 to-slate-200/70 dark:from-slate-800/80 dark:to-slate-900 border border-slate-200/90 dark:border-slate-700/80 rounded-3xl flex items-center justify-center p-5 shadow-inner overflow-hidden relative">
+              <!-- Empty State -->
+              <div id="empty-state" class="hidden text-center space-y-2 p-4">
+                <div class="w-12 h-12 rounded-2xl bg-slate-200/80 dark:bg-slate-700/80 text-slate-400 flex items-center justify-center mx-auto">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                  </svg>
+                </div>
+                <p class="text-sm font-medium text-slate-600 dark:text-slate-300">Enter text or a link</p>
+                <p class="text-xs text-slate-400 dark:text-slate-500">Your QR code will appear here</p>
+              </div>
+
+              <!-- QRCodeStyling Container -->
+              <div id="qr-preview-container" class="flex items-center justify-center w-full h-full rounded-2xl bg-white/95 dark:bg-slate-950/40 p-3 shadow-md ring-1 ring-black/5 dark:ring-white/10"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="w-full grid grid-cols-2 gap-3 mt-6">
+              <button id="download-btn" type="button" class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-all shadow-sm text-sm">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Download PNG
+              </button>
+
+              <button id="copy-btn" type="button" class="flex items-center justify-center gap-2 theme-subtle hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-semibold py-3 px-4 rounded-xl transition-all text-sm">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                Copy Image
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- VIEW 2: PRIVACY POLICY -->
+    <section id="view-privacy" class="app-view hidden">
+      <div class="theme-card rounded-2xl shadow-sm border p-6 sm:p-8 max-w-3xl mx-auto space-y-6">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-bold">Privacy Policy</h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Last updated: November 2026</p>
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p><strong>Link2QrCrafter</strong> is built with a privacy-first architecture. We do not collect, store, sell, or transmit any personal information or QR code content you enter.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">1. Zero Data Collection</h2>
+          <p>All links, text, and customization settings you input are processed exclusively inside your web browser's memory. Nothing is ever sent to a backend server or third-party analytics service.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">2. Local Storage</h2>
+          <p>We only use your browser's <code class="px-1.5 py-0.5 rounded theme-subtle text-xs font-mono">localStorage</code> to remember your Light/Dark theme preference. No tracking cookies or advertising identifiers are used.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">3. Third-Party Libraries</h2>
+          <p>This application loads styling (Tailwind CSS), fonts (Inter), and the QR generation library (qr-code-styling) from public CDNs. These static assets do not receive any of your input data.</p>
+        </div>
+        <div class="pt-2">
+          <button type="button" data-nav="generator" class="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Back to Generator</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: DATA & SECURITY -->
+    <section id="view-security" class="app-view hidden">
+      <div class="theme-card rounded-2xl shadow-sm border p-6 sm:p-8 max-w-3xl mx-auto space-y-6">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-bold">Data &amp; Security</h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">How Link2QrCrafter keeps your data safe</p>
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p><strong>100% Client-Side Processing:</strong> Every QR code is generated locally on your device using JavaScript. Because there is no server-side processing, your URLs, Wi-Fi credentials, or private notes never leave your browser.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">Zero Server Uploads</h2>
+          <p>When you click <em>Download PNG</em> or <em>Copy Image</em>, the image is exported directly from the HTML5 Canvas in your browser to your device's downloads folder or clipboard.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">Offline-Ready Logic</h2>
+          <p>Once the page is loaded, the QR generation engine operates completely independently without requiring network requests for encoding.</p>
+        </div>
+        <div class="pt-2">
+          <button type="button" data-nav="generator" class="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Back to Generator</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: TERMS OF USE -->
+    <section id="view-terms" class="app-view hidden">
+      <div class="theme-card rounded-2xl shadow-sm border p-6 sm:p-8 max-w-3xl mx-auto space-y-6">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+          <h1 class="text-2xl font-bold">Terms of Use</h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Last updated: November 2026</p>
+        </div>
+        <div class="space-y-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p>By using <strong>Link2QrCrafter</strong>, you agree to the following terms:</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">1. Permitted Use</h2>
+          <p>You may use Link2QrCrafter freely for personal, educational, or commercial purposes to generate QR codes for valid links and text.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">2. User Responsibility</h2>
+          <p>You are solely responsible for the content you encode into QR codes. Do not use this tool to distribute malicious links, phishing URLs, or unlawful content.</p>
+          <h2 class="text-base font-bold text-slate-900 dark:text-slate-100 pt-2">3. Disclaimer</h2>
+          <p>Link2QrCrafter is provided "as is" without warranties of any kind. Always test your generated QR codes with a scanner before printing or distributing them.</p>
+        </div>
+        <div class="pt-2">
+          <button type="button" data-nav="generator" class="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Back to Generator</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="theme-card border-t py-5 mt-auto">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+      <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-center sm:text-left">
+        <p>&copy; 2026 Link2QrCrafter. All processing happens locally in your browser.</p>
+        <span class="hidden sm:inline">&bull;</span>
+        <p>
+          Developed by <span class="font-medium text-slate-700 dark:text-slate-200">Sukhmandeep Singh</span> &bull;
+          <a href="https://techwithsukhman.vercel.app/" target="_blank" rel="noopener noreferrer" class="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">TechWithSukhman</a>
+        </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <button type="button" data-nav="privacy" class="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Privacy Policy</button>
+        <button type="button" data-nav="security" class="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Data &amp; Security</button>
+        <button type="button" data-nav="terms" class="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">Terms of Use</button>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Application State
+    const state = {
+      text: 'https://link2qrcrafter.app',
+      size: 256,
+      ecLevel: 'Q',
+      dotStyle: 'rounded',
+      cornerStyle: 'extra-rounded',
+      colorMode: 'gradient',
+      centerBadge: 'link',
+      fgColor: '#4f46e5',
+      fgColor2: '#06b6d4',
+      bgColor: '#ffffff',
+      maxBytes: 2953
+    };
+
+    // DOM References
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeIconSun = document.getElementById('theme-icon-sun');
+    const themeIconMoon = document.getElementById('theme-icon-moon');
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+
+    const textInput = document.getElementById('text-input');
+    const charCount = document.getElementById('char-count');
+    const clearBtn = document.getElementById('clear-btn');
+
+    const dotStyleSelect = document.getElementById('dot-style');
+    const cornerStyleSelect = document.getElementById('corner-style');
+    const colorModeSelect = document.getElementById('color-mode');
+    const centerBadgeSelect = document.getElementById('center-badge');
+    const ecLevelSelect = document.getElementById('ec-level');
+    const qrSizeInput = document.getElementById('qr-size');
+    const qrSizeVal = document.getElementById('qr-size-val');
+    const fgColorInput = document.getElementById('fg-color');
+    const fgColorHex = document.getElementById('fg-color-hex');
+    const fgColor2Wrap = document.getElementById('fg-color-2-wrap');
+    const fgColor2Input = document.getElementById('fg-color-2');
+    const fgColor2Hex = document.getElementById('fg-color-2-hex');
+    const bgColorInput = document.getElementById('bg-color');
+    const bgColorHex = document.getElementById('bg-color-hex');
+    const resetColorsBtn = document.getElementById('reset-colors-btn');
+
+    const qrPreviewContainer = document.getElementById('qr-preview-container');
+    const emptyState = document.getElementById('empty-state');
+    const qrStatusBadge = document.getElementById('qr-status-badge');
+
+    const downloadBtn = document.getElementById('download-btn');
+    const copyBtn = document.getElementById('copy-btn');
+
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+    let toastTimeout;
+
+    // Theme Management
+    function applyTheme(isDark) {
+      document.documentElement.classList.toggle('dark', isDark);
+      themeIconSun.classList.toggle('hidden', !isDark);
+      themeIconMoon.classList.toggle('hidden', isDark);
+      localStorage.setItem('link2qrcrafter-theme', isDark ? 'dark' : 'light');
+    }
+
+    const savedTheme = localStorage.getItem('link2qrcrafter-theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(savedTheme ? savedTheme === 'dark' : prefersDark);
+
+    themeToggle.addEventListener('click', () => {
+      applyTheme(!document.documentElement.classList.contains('dark'));
+    });
+
+    // Mobile Menu Toggle
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    // In-Page Navigation
+    function navigateTo(viewName) {
+      document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
+      const targetView = document.getElementById(`view-${viewName}`);
+      if (targetView) targetView.classList.remove('hidden');
+
+      document.querySelectorAll('.nav-link').forEach(btn => {
+        const isActive = btn.dataset.nav === viewName;
+        if (isActive) {
+          btn.classList.add('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'font-semibold');
+          btn.classList.remove('text-slate-600', 'dark:text-slate-300', 'font-medium');
+        } else {
+          btn.classList.remove('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'font-semibold');
+          btn.classList.add('text-slate-600', 'dark:text-slate-300', 'font-medium');
+        }
+      });
+
+      mobileMenu.classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.querySelectorAll('[data-nav]').forEach(btn => {
+      btn.addEventListener('click', () => navigateTo(btn.dataset.nav));
+    });
+
+    // Toast Helper
+    function showToast(msg) {
+      toastMessage.textContent = msg;
+      toast.classList.remove('translate-y-16', 'opacity-0');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.add('translate-y-16', 'opacity-0');
+      }, 2400);
+    }
+
+    // Update Character & Byte Counter
+    function updateCounter() {
+      const bytes = new Blob([state.text]).size;
+      charCount.textContent = `${state.text.length} chars • ${bytes} / ${state.maxBytes} bytes`;
+    }
+
+    // Generate clean SVG Data URL for Center Badge
+    function getBadgeDataUrl(badgeType, color, bgColor) {
+      if (badgeType === 'none') return undefined;
+      const icons = {
+        link: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>',
+        star: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>',
+        shield: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>',
+        sparkles: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>'
+      };
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="80" height="80"><rect width="40" height="40" rx="12" fill="${bgColor}"/><g transform="translate(8,8)" fill="none" stroke="${color}">${icons[badgeType] || icons.link}</g></svg>`;
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    // Render QR Code using qr-code-styling
+    function renderQR() {
+      const data = state.text.trim();
+      qrPreviewContainer.innerHTML = '';
+
+      if (!data) {
+        qrPreviewContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        downloadBtn.disabled = true;
+        copyBtn.disabled = true;
+        qrStatusBadge.textContent = 'Waiting for input';
+        qrStatusBadge.className = 'text-xs font-medium px-2.5 py-1 rounded-full theme-subtle text-slate-500 dark:text-slate-400';
+        return;
+      }
+
+      const byteLength = new Blob([data]).size;
+      if (byteLength > state.maxBytes) {
+        qrPreviewContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        downloadBtn.disabled = true;
+        copyBtn.disabled = true;
+        qrStatusBadge.textContent = 'Exceeds capacity';
+        qrStatusBadge.className = 'text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400';
+        return;
+      }
+
+      try {
+        const dotsColorConfig = state.colorMode === 'gradient'
+          ? {
+              gradient: {
+                type: 'linear',
+                rotation: Math.PI / 4,
+                colorStops: [
+                  { offset: 0, color: state.fgColor },
+                  { offset: 1, color: state.fgColor2 }
+                ]
+              }
+            }
+          : { color: state.fgColor };
+
+        const qrCode = new QRCodeStyling({
+          width: state.size,
+          height: state.size,
+          type: 'canvas',
+          data: data,
+          margin: 10,
+          qrOptions: {
+            errorCorrectionLevel: state.ecLevel
+          },
+          dotsOptions: {
+            type: state.dotStyle,
+            ...dotsColorConfig
+          },
+          cornersSquareOptions: {
+            type: state.cornerStyle,
+            color: state.fgColor
+          },
+          cornersDotOptions: {
+            type: state.cornerStyle === 'square' ? 'square' : 'dot',
+            color: state.colorMode === 'gradient' ? state.fgColor2 : state.fgColor
+          },
+          backgroundOptions: {
+            color: state.bgColor
+          },
+          image: getBadgeDataUrl(state.centerBadge, state.fgColor, state.bgColor),
+          imageOptions: {
+            hideBackgroundDots: true,
+            imageSize: 0.35,
+            margin: 6
+          }
+        });
+
+        qrCode.append(qrPreviewContainer);
+
+        emptyState.classList.add('hidden');
+        qrPreviewContainer.classList.remove('hidden');
+        downloadBtn.disabled = false;
+        copyBtn.disabled = false;
+        qrStatusBadge.textContent = 'Ready';
+        qrStatusBadge.className = 'text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400';
+      } catch (err) {
+        console.error(err);
+        qrPreviewContainer.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        downloadBtn.disabled = true;
+        copyBtn.disabled = true;
+        qrStatusBadge.textContent = 'Too dense for EC level';
+        qrStatusBadge.className = 'text-xs font-medium px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400';
+      }
+    }
+
+    // Event Listeners
+    textInput.addEventListener('input', (e) => {
+      state.text = e.target.value;
+      updateCounter();
+      renderQR();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      state.text = '';
+      textInput.value = '';
+      updateCounter();
+      renderQR();
+      showToast('Cleared input');
+    });
+
+    dotStyleSelect.addEventListener('change', (e) => {
+      state.dotStyle = e.target.value;
+      renderQR();
+    });
+
+    cornerStyleSelect.addEventListener('change', (e) => {
+      state.cornerStyle = e.target.value;
+      renderQR();
+    });
+
+    colorModeSelect.addEventListener('change', (e) => {
+      state.colorMode = e.target.value;
+      fgColor2Wrap.classList.toggle('hidden', state.colorMode !== 'gradient');
+      renderQR();
+    });
+
+    centerBadgeSelect.addEventListener('change', (e) => {
+      state.centerBadge = e.target.value;
+      renderQR();
+    });
+
+    ecLevelSelect.addEventListener('change', (e) => {
+      state.ecLevel = e.target.value;
+      renderQR();
+    });
+
+    qrSizeInput.addEventListener('input', (e) => {
+      state.size = parseInt(e.target.value, 10);
+      qrSizeVal.textContent = `${state.size} × ${state.size} px`;
+      renderQR();
+    });
+
+    fgColorInput.addEventListener('input', (e) => {
+      state.fgColor = e.target.value;
+      fgColorHex.textContent = e.target.value.toUpperCase();
+      renderQR();
+    });
+
+    fgColor2Input.addEventListener('input', (e) => {
+      state.fgColor2 = e.target.value;
+      fgColor2Hex.textContent = e.target.value.toUpperCase();
+      renderQR();
+    });
+
+    bgColorInput.addEventListener('input', (e) => {
+      state.bgColor = e.target.value;
+      bgColorHex.textContent = e.target.value.toUpperCase();
+      renderQR();
+    });
+
+    resetColorsBtn.addEventListener('click', () => {
+      state.dotStyle = 'rounded';
+      state.cornerStyle = 'extra-rounded';
+      state.colorMode = 'gradient';
+      state.centerBadge = 'link';
+      state.fgColor = '#4f46e5';
+      state.fgColor2 = '#06b6d4';
+      state.bgColor = '#ffffff';
+
+      dotStyleSelect.value = 'rounded';
+      cornerStyleSelect.value = 'extra-rounded';
+      colorModeSelect.value = 'gradient';
+      centerBadgeSelect.value = 'link';
+      fgColor2Wrap.classList.remove('hidden');
+      fgColorInput.value = '#4f46e5';
+      fgColorHex.textContent = '#4F46E5';
+      fgColor2Input.value = '#06b6d4';
+      fgColor2Hex.textContent = '#06B6D4';
+      bgColorInput.value = '#ffffff';
+      bgColorHex.textContent = '#FFFFFF';
+      renderQR();
+      showToast('Style reset');
+    });
+
+    // Helper to get active canvas from qr-code-styling container
+    function getActiveCanvas() {
+      return qrPreviewContainer.querySelector('canvas');
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      const canvas = getActiveCanvas();
+      if (!canvas) return;
+      const link = document.createElement('a');
+      link.download = 'link2qrcrafter-qr.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('Downloaded PNG');
+    });
+
+    copyBtn.addEventListener('click', () => {
+      const canvas = getActiveCanvas();
+      if (!canvas) return;
+      canvas.toBlob(async (blob) => {
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          showToast('Copied image to clipboard!');
+        } catch (err) {
+          console.error(err);
+          showToast('Copy failed — try Download PNG');
+        }
+      });
+    });
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      updateCounter();
+      renderQR();
+    });
+  </script>
+</body>
+</html>
